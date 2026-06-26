@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Visualizador de Dados de Saúde Mental CBMGO</title>
+    
+    <!-- Importação de Ícones e Fontes do Design System -->
+    <link href="https://fonts.googleapis.com/css2?family=Material+Icons" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@300;400;500;700&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+    
+    <!-- Bibliotecas de Renderização Visual (D3 deve carregar ANTES do Plot) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/d3@7.9.0"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@observablehq/plot@0.6.16"></script>
+
+    <!-- Estilos Customizados e Definições de Cores Temáticas -->
+    <style>
+        :root {
+            --primary: #0b57d0;
+            --primary-container: #d3e3fd;
+            --on-primary: #ffffff;
+            --surface: #ffffff;
+            --surface-container: #f0f4f9;
+            --surface-container-high: #e9ebf0;
+            --on-surface-default: #1b1c1d;
+            --on-surface-de-emphasis: #444746;
+            --stroke-default: #dcdfe5;
+            --positive: #146c2e;
+            --negative: #b3261e;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --primary: #a8c7fa;
+                --primary-container: #1f3760;
+                --on-primary: #062e6f;
+                --surface: #101218;
+                --surface-container: #1e2025;
+                --surface-container-high: #2a2b36;
+                --on-surface-default: #ffffff;
+                --on-surface-de-emphasis: #c4c7c5;
+                --stroke-default: #2d2f38;
+            }
+        }
+
+        body {
+            font-family: "Google Sans", "Roboto", sans-serif;
+            background-color: var(--surface-container);
+            color: var(--on-surface-default);
+            transition: background-color 0.3s, color 0.3s;
+        }
+
+        .custom-card {
+            background-color: var(--surface);
+            border: 1px solid var(--stroke-default);
+            border-radius: 16px;
+        }
+
+        /* Destaque especial tridimensional para o painel do gráfico central */
+        .chart-highlight-card {
+            background-color: var(--surface);
+            border: 2px solid var(--primary);
+            box-shadow: 0 10px 25px -5px rgba(11, 87, 208, 0.12), 0 8px 10px -6px rgba(11, 87, 208, 0.12);
+            border-radius: 20px;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            .chart-highlight-card {
+                box-shadow: 0 10px 25px -5px rgba(168, 199, 250, 0.18), 0 8px 10px -6px rgba(168, 199, 250, 0.18);
+            }
+        }
+
+        .plot-chart rect {
+            transition: fill 0.2s, stroke-width 0.2s;
+            cursor: pointer;
+        }
+
+        .plot-chart rect:hover {
+            stroke: var(--primary);
+            stroke-width: 1.5px;
+        }
+    </style>
+</head>
+<body class="h-screen overflow-hidden flex flex-col">
+
+    <header class="custom-card m-4 p-4 flex flex-col md:flex-row justify-between items-center gap-4 shadow-sm shrink-0">
+        <div class="flex items-center gap-3">
+            <div class="p-3 bg-red-100 dark:bg-red-950/40 text-red-600 dark:text-red-400 rounded-xl">
+                <span class="material-icons text-3xl">health_and_safety</span>
+            </div>
+            <div>
+                <h1 class="text-xl font-bold tracking-tight">Diagnóstico Consolidado de Saúde Mental — CBMGO</h1>
+                <p class="text-xs text-slate-500 dark:text-slate-400">Totalidade do Universo Amostral (Fases I & II Integradas)</p>
+            </div>
+        </div>
+        <div class="flex items-center gap-4 bg-slate-100 dark:bg-slate-800/60 p-2 rounded-xl text-sm">
+            <span class="font-medium text-xs tracking-wider uppercase opacity-75">Universo Consolidado:</span>
+            <div class="flex gap-4">
+                <span class="flex items-center gap-1 font-semibold text-blue-600 dark:text-blue-400">
+                    <span class="material-icons text-sm">groups</span> 19 Gestores
+                </span>
+                <span class="flex items-center gap-1 font-semibold text-emerald-600 dark:text-emerald-400">
+                    <span class="material-icons text-sm">analytics</span> 125 Menções
+                </span>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-1 px-4 pb-4 overflow-hidden grid grid-cols-1 lg:grid-cols-12 gap-4">
+        
+        <!-- Painel da Tabela (Esquerda - Posição de Suporte Estatístico) -->
+        <section class="lg:col-span-3 order-2 lg:order-1 flex flex-col custom-card p-4 overflow-hidden h-full">
+            <div class="flex justify-between items-center mb-3 shrink-0 font-sans border-b pb-2 border-slate-100 dark:border-slate-800">
+                <h2 class="font-semibold text-xs flex items-center gap-1.5 text-slate-800 dark:text-slate-100 uppercase tracking-wider">
+                    <span class="material-icons text-emerald-600 text-sm">table_chart</span>
+                    Tabela de Frequências
+                </h2>
+                <button onclick="copiarTabela()" class="text-[10px] bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 px-2 py-1 rounded-lg flex items-center gap-0.5 transition">
+                    <span class="material-icons text-xs">content_copy</span> Copiar
+                </button>
+            </div>
+            <div class="flex-1 overflow-y-auto min-h-0 pr-1">
+                <table class="w-full text-[11px] text-left border-collapse" id="academic-table">
+                    <thead class="sticky top-0 bg-white dark:bg-slate-900 shadow-sm text-slate-400 z-10">
+                        <tr>
+                            <th class="py-2 px-1 border-b uppercase tracking-wider text-[9px]">Fator</th>
+                            <th class="py-2 px-1 border-b text-center uppercase tracking-wider text-[9px]">Votos</th>
+                            <th class="py-2 px-1 border-b text-right uppercase tracking-wider text-[9px]">%</th>
+                        </tr>
+                    </thead>
+                    <tbody id="table-body">
+                        <!-- Conteúdo injetado via Javascript -->
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- Painel do Gráfico Central (Destaque Principal com Borda de Ênfase e Maior Largura) -->
+        <section class="lg:col-span-6 order-first lg:order-2 flex flex-col chart-highlight-card p-5 overflow-hidden h-full">
+            <div class="flex justify-between items-center mb-3 shrink-0">
+                <h2 class="font-bold text-lg flex items-center gap-2 text-blue-600 dark:text-blue-400">
+                    <span class="material-icons text-blue-600 text-2xl">bar_chart</span>
+                    Ranking de Fatores de Desgaste
+                </h2>
+                <span class="text-xs bg-blue-100 dark:bg-blue-950/60 text-blue-800 dark:text-blue-300 px-2.5 py-1 rounded-full font-medium">Interativo</span>
+            </div>
+            
+            <div id="chart-container" class="flex-1 w-full min-h-0 flex items-center justify-center">
+                <!-- O gráfico do Observable Plot será desenhado aqui -->
+            </div>
+        </section>
+
+        <!-- Painel de Detalhes e Evidências (Direita) -->
+        <section class="lg:col-span-3 order-3 flex flex-col custom-card p-4 overflow-hidden h-full">
+            <div class="flex items-center gap-2 mb-3 shrink-0">
+                <span class="material-icons text-amber-500">record_voice_over</span>
+                <h3 class="font-semibold text-xs uppercase tracking-wider">Evidências Qualitativas</h3>
+            </div>
+            
+            <div id="category-selector-title" class="px-3 py-1.5 bg-blue-50 dark:bg-blue-950/30 text-blue-800 dark:text-blue-300 rounded-lg text-[10px] font-semibold mb-3 shrink-0">
+                Selecione uma categoria no gráfico ou na tabela para filtrar os relatos
+            </div>
+
+            <!-- Lista de Falas Dinâmicas -->
+            <div id="quotes-explorer" class="flex-1 overflow-y-auto space-y-2.5 pr-1">
+                <!-- Conteúdo injetado via Javascript -->
+            </div>
+        </section>
+    </main>
+
+    <script>
+        const dataset = [
+            {
+                id: "carreira",
+                categoria: "Gestão de Carreira e Justiça Organizacional",
+                categoriaCurta: "Carreira e Justiça",
+                votos: 29,
+                porcentagem: "23,2%",
+                color: "#1d4ed8", 
+                falas: [
+                    "O processo de promoção dos oficiais gera grande ansiedade e expectativas constantes na corporação.",
+                    "Falta de meritocracia real. Promoções automáticas que chegam para todos por mera coincidência temporal, e não pelo trabalho desenvolvido, acabam por minar a saúde motivacional da tropa.",
+                    "Quando a promoção ou o elogio chegam como consequência direta do trabalho e do valor entregue, o militar se sente genuinamente validado e motivado.",
+                    "Percepção de injustiça institucional nas movimentações ou premiações administrativas.",
+                    "Processo de transferência de militares entre quartéis sem critérios operacionais transparentes.",
+                    "Favoritismo interno e critérios de avaliação subjetivos que destroem a confiança no comando.",
+                    "Reconhecimento profissional nivelado por baixo dentro do sistema corporativo.",
+                    "Burocracias redundantes que engessam as rotinas administrativas e sufocam o gestor.",
+                    "Desvio de militares de suas funções de atividade-fim para cobrir gargalos burocráticos internos.",
+                    "Sentimento de que as decisões de ascensão de carreira desconsideram o mérito real e o effort diário do operacional.",
+                    "Insegurança crônica ou incertezas severas relacionadas aos caminhos de ascensão da carreira (Fase I).",
+                    "Processo de transferências e movimentações desestruturadas e sem critérios objetivos (Fase I).",
+                    "Promoções e mudanças organizacionais gerando forte instabilidade e estresse situacional (Fase I).",
+                    "Reconhecimento baseado no mérito real atua diretamente como fator essencial de motivação."
+                ]
+            },
+            {
+                id: "escala",
+                categoria: "Carga Horária, Escalas e Efetivo",
+                categoriaCurta: "Escalas e Carga",
+                votos: 29,
+                porcentagem: "23,2%",
+                color: "#2563eb", 
+                falas: [
+                    "Déficit severo de efetivo que obriga o acúmulo e desvio de funções rotineiras nas unidades.",
+                    "Jornada fatigante de horas extras remuneradas (serviço extraordinário voluntário) em busca de complementação financeira de sobrevivência.",
+                    "Excesso de serviço extraordinário e sobrecarga operacional contínua na ponta de atendimento.",
+                    "Escalas de serviço exaustivas que forçam longas jornadas de trabalho, com militares que chegam a ficar até 72 horas diretas no serviço operacional.",
+                    "Acúmulo de atribuições simultâneas de gestão e serviço operacional devido à falta de auxiliares administrativos.",
+                    "Condições estruturais e de ambiente de trabalho deficitárias em quarteis menores do interior.",
+                    "Gargalo no planejamento de escalas que compromete as folgas regulamentares da equipe.",
+                    "Sensação crônica de esgotamento e exaustão física em decorrência da escassez contínua de militares para atender às demandas crescentes.",
+                    "Sobrecarga de trabalho intensa com acúmulo de funções incompatíveis com o tempo regulamentar (Fase I).",
+                    "Efetivo extremamente reduzido sobrecarregando o serviço ordinário das equipes (Fase I).",
+                    "Cobrança e quantidade de missões administrativas e de representação em excesso (Fase I).",
+                    "Dependência financeira crucial do serviço extraordinário pago, forçando alta carga horária contínua."
+                ]
+            },
+            {
+                id: "clima",
+                categoria: "Clima Organizacional e Liderança",
+                categoriaCurta: "Clima e Liderança",
+                votos: 18,
+                porcentagem: "14,4%",
+                color: "#059669", 
+                falas: [
+                    "A importância vital de uma liderança acessível, transparente e presente no dia a dia da unidade.",
+                    "Tratamento respeitoso e justo por parte das chefias imediatas como pilar de proteção psíquica.",
+                    "Coesão de equipe e forte sentimento de camaradagem e cooperação mútua na execução do serviço.",
+                    "Falta de exemplo ético de superiores hierárquicos como fator de desmotivação crônica.",
+                    "Cultura institucional baseada mais na punição e cobrança do que no acolhimento e escuta ativa.",
+                    "Valores éticos fundamentais que sustentam o militar em crise: Honestidade, Justiça, Respeito e Camaradagem mútua."
+                ]
+            },
+            {
+                id: "financeiro",
+                categoria: "Estigma Institucional e Gestão Financeira",
+                categoriaCurta: "Estigma e Finanças",
+                votos: 17,
+                porcentagem: "13,6%",
+                color: "#0284c7", 
+                falas: [
+                    "Alto nível de endividamento de militares, gerando estresse financeiro crônico que afeta o serviço na rua.",
+                    "Dificuldades financeiras graves que os militares enfrentam em suas rotinas privadas.",
+                    "Remuneração percebida como defasada frente aos riscos e à responsabilidade atribuídos à função pública.",
+                    "Descontrole financeiro pessoal de praças e oficiais, evidenciando a ausência de suporte de educação financeira interna.",
+                    "Estigma institucional para admitir sofrimento psicológico ou pedir ajuda médica por receio de punição tácita ou perda de respeito.",
+                    "A preocupação constante com a imagem social e institucional que a população nutre sobre a eficiência corporativa dos bombeiros.",
+                    "A fé cristã e o suporte espiritual pessoal atuando como estratégias cruciais de enfrentamento e resiliência psíquica diante de crises.",
+                    "Dificuldades geradas por problemas externos da vida pessoal, tais como financeiro, espiritual e familiar (Fase I)."
+                ]
+            },
+            {
+                id: "sono",
+                categoria: "Sono, Alimentação e Saúde Biológica",
+                categoriaCurta: "Sono e Alimentação",
+                votos: 13,
+                porcentagem: "10,4%",
+                color: "#eab308", 
+                falas: [
+                    "Privação severa de sono nas escalas de 24h e impossibilidade de descanso biológico adequado entre as ocorrências.",
+                    "Limitação crônica do tempo ideal de sono provocando distúrbios de atenção e cansaço cognitivo.",
+                    "Falta de rotina para alimentação balanceada durante o plantão operacional de emergência.",
+                    "Dificuldade de manter a prática regular de atividade física devido ao ritmo desgastante das escalas e cansaço físico.",
+                    "Desenvolvimento de problemas de hipertensão e patologias cardíacas ligadas ao estado de alerta."
+                ]
+            },
+            {
+                id: "natureza",
+                categoria: "Natureza da Atividade e Trauma Operacional",
+                categoriaCurta: "Trauma Operacional",
+                votos: 10,
+                porcentagem: "8,0%",
+                color: "#dc2626", 
+                falas: [
+                    "A natureza estressante de ter que lidar continuamente com o imprevisível, situações de crise extrema e risco de vida iminente.",
+                    "O sofrimento emocional resultante do atendimento diário a ocorrências com óbitos, acidentes graves e sofrimento humano agudo.",
+                    "Transtorno de estresse pós-traumático silencioso após missões operacionais de alta complexidade emocional.",
+                    "Estresse tático e ansiedade gerados pelo estado contínuo de vigilância e prontidão operacional.",
+                    "Rotina intrínseca do serviço operacional bombeiro militar como fator gerador de ansiedade primária (Fase I).",
+                    "A característica do serviço operacional de lidar com situações críticas e de crise que de antemão provocam estresse."
+                ]
+            },
+            {
+                id: "familia",
+                categoria: "Conflito Trabalho-Família",
+                categoriaCurta: "Trabalho e Família",
+                votos: 9,
+                porcentagem: "7,2%",
+                color: "#ea580c", 
+                falas: [
+                    "Perda drástica de tempo de qualidade para convivência com cônjuges e filhos devido ao excesso de missões extras.",
+                    "Comunicações e ordens de serviço por WhatsApp a todo momento, invadindo os horários de folga regulamentar e o espaço familiar.",
+                    "Dificuldade em desconectar-se do ambiente de alerta militar, gerando desajustes e cobranças de relacionamento familiar.",
+                    "Problemas conjugais e divórcios influenciados pela ausência recorrente nos finais de semana e feriados.",
+                    "Dificuldades extremas na conciliação equilibrada entre a vida profissional e a estrutura familiar (Fase I)."
+                ]
+            }
+        ];
+
+        let selectedCategoryId = null;
+
+        function renderTable() {
+            const tbody = document.getElementById("table-body");
+            tbody.innerHTML = "";
+            dataset.forEach(item => {
+                const tr = document.createElement("tr");
+                const isSelected = item.id === selectedCategoryId;
+                tr.className = `hover:bg-slate-50 dark:hover:bg-slate-800/50 transition cursor-pointer border-b border-slate-100 dark:border-slate-800/40 ${isSelected ? 'bg-blue-50/70 dark:bg-blue-950/30 font-bold' : ''}`;
+                tr.onclick = () => selectCategory(item.id);
+                tr.innerHTML = `
+                    <td class="py-3 px-1 text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                        <span class="w-2.5 h-2.5 rounded-full shrink-0" style="background-color: ${item.color}"></span>
+                        <span class="${isSelected ? 'text-blue-700 dark:text-blue-400' : ''}">${item.categoriaCurta}</span>
+                    </td>
+                    <td class="py-3 px-1 text-center ${isSelected ? 'text-blue-700 dark:text-blue-400' : 'text-slate-800 dark:text-slate-100'}">${item.votos}</td>
+                    <td class="py-3 px-1 text-right ${isSelected ? 'text-blue-700 dark:text-blue-400' : 'text-slate-800 dark:text-slate-100'}">${item.porcentagem}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function selectCategory(id) {
+            selectedCategoryId = id;
+            const category = dataset.find(item => item.id === id);
+            
+            const titleBox = document.getElementById("category-selector-title");
+            titleBox.textContent = `${category.categoria}`;
+            titleBox.style.backgroundColor = `${category.color}15`;
+            titleBox.style.color = category.color;
+
+            const quotesContainer = document.getElementById("quotes-explorer");
+            quotesContainer.innerHTML = "";
+            
+            category.falas.forEach(fala => {
+                const quoteCard = document.createElement("div");
+                quoteCard.className = "p-3 bg-slate-50 dark:bg-slate-800/40 border-l-4 rounded-r-lg shadow-sm text-xs italic text-slate-700 dark:text-slate-300 flex flex-col gap-1.5 transition hover:translate-x-1";
+                quoteCard.style.borderColor = category.color;
+                quoteCard.innerHTML = `
+                    <p class="line-clamp-4">"${fala}"</p>
+                    <span class="text-[9px] font-semibold text-slate-400 not-italic uppercase tracking-wider flex items-center gap-0.5">
+                        <span class="material-icons text-xs">verified_user</span> Evidência de Campo
+                    </span>
+                `;
+                quotesContainer.appendChild(quoteCard);
+            });
+
+            renderChart();
+            renderTable();
+        }
+
+        function renderChart() {
+            const container = document.getElementById("chart-container");
+            if (!container) return;
+
+            // Garantir uma largura computada mesmo antes da renderização de layout terminar
+            let width = container.clientWidth;
+            if (!width || width < 100) {
+                width = container.parentElement ? container.parentElement.clientWidth - 40 : 500;
+                if (width <= 0) width = 500;
+            }
+            
+            const marginL = width < 400 ? 100 : (width < 600 ? 120 : 150);
+
+            // Geração segura do gráfico utilizando escala "identity" para evitar quebras do JS do Plot
+            const chart = Plot.plot({
+                width: width,
+                height: 400,
+                marginLeft: marginL,
+                marginRight: 45,
+                x: {
+                    label: "Menções Operacionais →",
+                    grid: true,
+                    domain: [0, 32]
+                },
+                y: {
+                    label: null,
+                    padding: 0.35,
+                    domain: dataset.map(d => d.categoriaCurta) 
+                },
+                color: {
+                    type: "identity" // O Plot utilizará exatamente as strings de cor passadas no canal 'fill'
+                },
+                marks: [
+                    Plot.barX(dataset, {
+                        x: "votos",
+                        y: "categoriaCurta",
+                        // Aplicação de opacidade dinâmica segura via valor de canal de cor hex de 8 caracteres
+                        fill: d => selectedCategoryId === null || selectedCategoryId === d.id ? d.color : d.color + "33",
+                        rx: 6,
+                        title: d => `${d.categoria}\nMenções: ${d.votos} (${d.porcentagem})`
+                    }),
+                    Plot.text(dataset, {
+                        x: "votos",
+                        y: "categoriaCurta",
+                        text: d => d.porcentagem,
+                        dx: 24,
+                        fontSize: 11,
+                        fontWeight: "bold",
+                        fill: "currentColor"
+                    }),
+                    Plot.ruleX([0])
+                ]
+            });
+
+            container.innerHTML = "";
+            container.appendChild(chart);
+
+            // Re-vincular os gatilhos de interação nas barras renderizadas
+            const bars = container.querySelectorAll("g[aria-label='bar'] rect");
+            bars.forEach((bar, index) => {
+                bar.addEventListener("click", () => {
+                    selectCategory(dataset[index].id);
+                });
+            });
+        }
+
+        function copiarTabela() {
+            let texto = "Categoria do Fator de Desgaste (CBMGO)\tQuantidade de Citações\tPorcentagem (%)\n";
+            dataset.forEach(d => {
+                texto += `${d.categoria}\t${d.votos}\t${d.porcentagem}\n`;
+            });
+            
+            const el = document.createElement('textarea');
+            el.value = texto;
+            document.body.appendChild(el);
+            el.select();
+            document.execCommand('copy');
+            document.body.removeChild(el);
+
+            const alertBox = document.createElement("div");
+            alertBox.className = "fixed bottom-4 right-4 bg-emerald-600 text-white px-4 py-2 rounded-lg text-xs font-semibold shadow-lg transition-all duration-300 transform translate-y-0 flex items-center gap-1.5 z-50";
+            alertBox.innerHTML = `<span class="material-icons text-sm">check_circle</span> Dados copiados com sucesso!`;
+            document.body.appendChild(alertBox);
+            setTimeout(() => {
+                alertBox.remove();
+            }, 3000);
+        }
+
+        // Eventos Globais de Inicialização e Responsividade
+        window.addEventListener("resize", () => {
+            renderChart();
+        });
+
+        window.addEventListener("DOMContentLoaded", () => {
+            renderTable();
+            // Utilizando frame de animação para garantir que o navegador calculou as dimensões do grid
+            requestAnimationFrame(() => {
+                selectCategory("carreira");
+            });
+        });
+    </script>
+</body>
+</html>
